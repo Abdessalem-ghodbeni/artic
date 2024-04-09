@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 import java.util.Date;
 
 
@@ -20,7 +21,7 @@ public class Rendez_Vous implements Serializable {
 private String type;
 
     @Temporal(TemporalType.TIMESTAMP)
-    private Date dateRerndezVous;
+    private LocalDateTime date;
 
     @ManyToOne
     @JoinColumn(name = "patient_id")

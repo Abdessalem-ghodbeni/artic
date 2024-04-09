@@ -1,11 +1,9 @@
 package com.artic.artic_doctors.Services;
 
-import com.artic.artic_doctors.Entities.Disponibilite;
-import com.artic.artic_doctors.Entities.Doctor;
-import com.artic.artic_doctors.Entities.Patient;
-import com.artic.artic_doctors.Entities.Rendez_Vous;
+import com.artic.artic_doctors.Entities.*;
 import com.artic.artic_doctors.Exception.DoctorNotAvailableException;
 import com.artic.artic_doctors.Exception.RessourceNotFound;
+import com.artic.artic_doctors.Repository.DisponibilityRepository;
 import com.artic.artic_doctors.Repository.IDoctorRepository;
 import com.artic.artic_doctors.Repository.IPatientRepository;
 import com.artic.artic_doctors.Repository.IRendezVousRepository;
@@ -14,6 +12,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.print.Doc;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -23,49 +26,98 @@ public class IRendezVousServicesImpl implements IRendezVousServices{
     private final IRendezVousRepository rendezVousRepository;
     private final IPatientRepository patientRepository;
     private final IDoctorRepository doctorRepository;
-   @Transactional
+private  final DisponibilityRepository disponibilityRepository;
+
+    @Transactional
     @Override
-    public String addRendezVous(Rendez_Vous RendezVous) {
-       Patient patient = patientRepository.findById(RendezVous.getPatient().getId()).orElseThrow(() -> new RessourceNotFound("accun patient avec l'id :" + RendezVous.getPatient().getId()));
-       Doctor doctor = doctorRepository.findById(RendezVous.getDoctor().getId()).orElseThrow(() -> new RessourceNotFound("accun doctor avec l'id :" + RendezVous.getDoctor().getId()));
+    public String addRendezVous(Rendez_Vous rendezVous) {
+        Patient patient = patientRepository.findById(rendezVous.getPatient().getId())
+                .orElseThrow(() -> new RessourceNotFound("Aucun patient avec l'id :" + rendezVous.getPatient().getId()));
 
-//       boolean isDisponible = false;
-//       for (Disponibilite disponibilite : doctor.getDisponibilites()) {
-//           if (disponibilite.getDateDisponibilite().equals(dateRendezVous)) {
-//               isDisponible = true;
-//               break;
-//           }
-//       }
-       boolean isDisponible = doctor.getDisponibilites().isEmpty() ||
-               !doctor.getDisponibilites().stream()
-                       .map(Disponibilite::getDateDisponibilite)
-                       .collect(Collectors.toList())
-                       .contains(RendezVous.getDateRerndezVous());
-       Rendez_Vous rendezvous = null;
-       if (isDisponible) {
+        Doctor doctor = doctorRepository.findById(rendezVous.getDoctor().getId())
+                .orElseThrow(() -> new RessourceNotFound("Aucun docteur avec l'id :" + rendezVous.getDoctor().getId()));
 
-//           Rendez_Vous rendezVous = new Rendez_Vous();
-           RendezVous.setPatient(patient);
-           RendezVous.setDoctor(doctor);
-//           rendezVous.setDateRerndezVous(RendezVous.get);
-           patient.getRendezVous().add(RendezVous);
-           doctor.getRendezVous().add(RendezVous);
-           Disponibilite disponibilite = new Disponibilite();
-           disponibilite.setDateDisponibilite(RendezVous.getDateRerndezVous());
-           disponibilite.setDoctor(doctor);
-           doctor.getDisponibilites().add(disponibilite);
-           patientRepository.save(patient);
-           doctorRepository.save(doctor);
-           rendezvous = rendezVousRepository.save(RendezVous);
-           return rendezvous.toString();
-//       }
-       } else {
-           throw new DoctorNotAvailableException("Le médecin n'est pas disponible à la date spécifiée. Veuillez choisir une autre date.");
-       }
+        // Vérifier si le médecin est disponible
+        boolean isDisponible = doctor.getDisponibilites().isEmpty() ||
+                doctor.getDisponibilites().stream()
+                        .noneMatch(disponibilite -> {
+                            LocalDateTime rendezVousStartTime = rendezVous.getDate();
+                            LocalDateTime rendezVousEndTime = rendezVousStartTime.plusMinutes(30); // Ajouter 30 minutes au rendez-vous
 
-   }
+                            LocalDateTime disponibiliteStartTime = disponibilite.getStartTime();
+                            LocalDateTime disponibiliteEndTime = disponibilite.getEndTime();
 
+                            // Vérifier si le rendez-vous chevauche une disponibilité du médecin avec statut "RESERVED"
+                            return disponibilite.getStatus() == Status.RESERVED &&
+                                    ((rendezVousStartTime.isBefore(disponibiliteEndTime) || rendezVousStartTime.equals(disponibiliteEndTime)) &&
+                                            (rendezVousEndTime.isAfter(disponibiliteStartTime) || rendezVousEndTime.equals(disponibiliteStartTime)));
+                        });
 
+        if (!isDisponible) {
+            throw new DoctorNotAvailableException("Le médecin n'est pas disponible à la date spécifiée. Veuillez choisir une autre date.");
+        }
+
+        // Créer le rendez-vous
+        rendezVous.setPatient(patient);
+        rendezVous.setDoctor(doctor);
+        patient.getRendezVous().add(rendezVous);
+        doctor.getRendezVous().add(rendezVous);
+
+        // Enregistrer le rendez-vous
+        Rendez_Vous rendezvous = rendezVousRepository.save(rendezVous);
+
+        // Créer une disponibilité avec statut "RESERVED" pour le médecin
+        Disponibilite disponibilite = new Disponibilite();
+        disponibilite.setDoctor(doctor);
+        disponibilite.setStatus(Status.RESERVED);
+        disponibilite.setStartTime(rendezVous.getDate());
+        disponibilite.setEndTime(rendezVous.getDate().plusMinutes(30)); // Ajouter 30 minutes à la disponibilité
+
+        // Enregistrer la disponibilité dans la base de données
+        disponibilityRepository.save(disponibilite);
+
+        // Enregistrer les modifications
+        patientRepository.save(patient);
+        doctorRepository.save(doctor);
+
+        return rendezvous.toString();
+    }
+
+    @Override
+    public void deleteRendezVous(long rendezVousId) {
+        // Rechercher le rendez-vous dans la base de données
+        Rendez_Vous rendezVous = rendezVousRepository.findById(rendezVousId)
+                .orElseThrow(() -> new RessourceNotFound("Aucun rendez-vous avec l'id :" + rendezVousId));
+
+        // Récupérer le patient associé au rendez-vous
+        Patient patient = rendezVous.getPatient();
+
+        // Récupérer le médecin associé au rendez-vous
+        Doctor doctor = rendezVous.getDoctor();
+
+        // Rechercher la disponibilité associée au rendez-vous
+        Disponibilite disponibilite = doctor.getDisponibilites().stream()
+                .filter(d -> d.getStartTime().isEqual(rendezVous.getDate()))
+                .findFirst()
+                .orElseThrow(() -> new RessourceNotFound("Aucune disponibilité associée à ce rendez-vous"));
+
+        // Supprimer la disponibilité de la liste de disponibilités du médecin
+        doctor.getDisponibilites().remove(disponibilite);
+
+        // Supprimer la disponibilité de la base de données
+        disponibilityRepository.delete(disponibilite);
+
+        // Retirer le rendez-vous des listes de rendez-vous du patient et du médecin
+        patient.getRendezVous().remove(rendezVous);
+        doctor.getRendezVous().remove(rendezVous);
+
+        // Enregistrer les modifications dans la base de données
+        patientRepository.save(patient);
+        doctorRepository.save(doctor);
+
+        // Supprimer le rendez-vous de la base de données
+     rendezVousRepository.delete(rendezVous);
+    }
 
 
 }
