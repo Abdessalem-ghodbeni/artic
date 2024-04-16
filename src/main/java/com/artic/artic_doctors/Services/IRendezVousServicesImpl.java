@@ -119,5 +119,18 @@ private  final DisponibilityRepository disponibilityRepository;
      rendezVousRepository.delete(rendezVous);
     }
 
+    @Override
+    public List<Rendez_Vous> getAllRendezVousByPatientId(Long idPatient) {
+        List<Rendez_Vous>listeRendezVous=rendezVousRepository.findByPatientId(idPatient);
+
+        return listeRendezVous;
+    }
+
+    @Override
+    public Rendez_Vous getRendezVousByid(Long idRendezVous) {
+        Rendez_Vous rendezVous=rendezVousRepository.findById(idRendezVous).orElseThrow(()->new RessourceNotFound("Accun rendez Vous avec cet id : "+idRendezVous));
+        return rendezVous;
+    }
+
 
 }

@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Date;
+import java.util.List;
 
 @RestController
 @CrossOrigin("*")
@@ -42,5 +43,24 @@ public class RendezVousController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("rendezvous n'existe pas  avec id  " + idRdv);
         }
 
+    }
+    @GetMapping(path = "/all/rendez/vous/{idPatient}")
+    public  ResponseEntity<?>GetAllRendeVousByPatientId(@PathVariable("idPatient")long idPatient){
+        try{
+            List<Rendez_Vous>rendezVous=rendezVousServices.getAllRendezVousByPatientId(idPatient);
+return ResponseEntity.ok(rendezVous);
+        }
+        catch (RessourceNotFound exception){
+            return  ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(exception.getMessage());
+        }
+    }
+
+    @GetMapping(path = "/details/{id_rendez_vous}")
+    public ResponseEntity<?> getRendezVousById(@PathVariable("id_rendez_vous")Long idRendezVous){
+        try {
+            return ResponseEntity.ok(rendezVousServices.getRendezVousByid(idRendezVous));
+        }catch (RessourceNotFound exp){
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(exp.getMessage());
+        }
     }
 }

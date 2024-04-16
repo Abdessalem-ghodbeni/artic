@@ -1,5 +1,6 @@
 package com.artic.artic_doctors.Entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,7 +23,7 @@ private String type;
 
     @Temporal(TemporalType.TIMESTAMP)
     private LocalDateTime date;
-
+@JsonIgnore
     @ManyToOne
     @JoinColumn(name = "patient_id")
     private Patient patient;
